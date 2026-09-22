@@ -1,25 +1,61 @@
-name: ci
+name: YouTube Download
 
-on: [push, pull_request]
+on:
+  push:
+    paths:
+      - "playlist.txt"
+      - "config.txt"
+      - ".github/workflows/ci.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
-  build:
+  download:
     runs-on: ubuntu-latest
 
-    permissions:
-      contents: write
-      
     steps:
-      - name: Clone repository
-        uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v7
 
-      - name: download
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.13"
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: latest
+
+      - name: Install yt-dlp and FFmpeg
         run: |
-          git config --local user.email "justjavac@gmail.com"
-          git config --local user.name "迷渡"
-          git remote set-url origin https://${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}
-          git pull --rebase
-          ./bin/youtube-dl --config-location config.txt
-          git add .
-          git commit -m "download youtube video"
-          git push
+          python -m pip install --upgrade pip
+          python -m pip install --upgrade "yt-dlp[default,curl-cffi]"
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: Show versions
+        run: |
+          yt-dlp --version
+          deno --version
+          ffmpeg -version | head -n 1
+
+      - name: Download videos
+        run: |
+          mkdir -p downloads
+          yt-dlp --config-location config.txt
+
+      - name: Commit downloaded files
+        run: |
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+          git add downloads/
+
+          if git diff --cached --quiet; then
+            echo "No new files to commit."
+          else
+            git commit -m "Download YouTube videos"
+            git push
+          fi
